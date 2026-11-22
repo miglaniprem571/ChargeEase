@@ -3009,3 +3009,351 @@ button, a, input, select, textarea { touch-action: manipulation; }
     gap: 8px;
   }
 }
+
+
+/* =========================================================
+   Sarvam AI: ChargeEase Saarthi Multilingual Co-Pilot
+   ========================================================= */
+.sarvam-spark-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #F97316, #10B981);
+  box-shadow: 0 0 8px rgba(249, 115, 22, 0.55);
+  flex-shrink: 0;
+}
+
+.sarvam-cta-outline {
+  border-color: rgba(249, 115, 22, 0.5) !important;
+}
+
+.sarvam-header-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-color: rgba(249, 115, 22, 0.45) !important;
+  font-weight: 600;
+}
+
+.sarvam-brief-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-color: rgba(249, 115, 22, 0.45) !important;
+}
+
+.sarvam-fab {
+  position: fixed;
+  right: 20px;
+  bottom: 78px;
+  z-index: 1200;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 16px;
+  border-radius: 9999px;
+  border: 1px solid rgba(249, 115, 22, 0.45);
+  background: linear-gradient(135deg, #15171C 0%, #1F242D 100%);
+  color: #FFFFFF;
+  font-family: var(--font-main);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(16, 185, 129, 0.18);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.sarvam-fab:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(249, 115, 22, 0.55);
+}
+
+.sarvam-fab-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #F97316;
+  box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.7);
+  animation: sarvamPulse 2s infinite;
+}
+
+.sarvam-fab-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.22), rgba(16, 185, 129, 0.22));
+  color: #FDBA74;
+  border: 1px solid rgba(249, 115, 22, 0.35);
+}
+
+@keyframes sarvamPulse {
+  0% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.7); }
+  70% { box-shadow: 0 0 0 8px rgba(249, 115, 22, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0); }
+}
+
+.sarvam-drawer {
+  position: fixed;
+  right: 20px;
+  bottom: 132px;
+  z-index: 1300;
+  width: min(410px, calc(100vw - 24px));
+  max-height: min(600px, calc(100vh - 155px));
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  box-shadow: var(--shadow-modal);
+  overflow: hidden;
+}
+
+.sarvam-drawer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-surface);
+}
+
+.sarvam-title-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  font-size: 14px;
+}
+
+.sarvam-badge-pill {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background: rgba(249, 115, 22, 0.14);
+  color: #EA580C;
+  border: 1px solid rgba(249, 115, 22, 0.32);
+}
+
+[data-theme="dark"] .sarvam-badge-pill {
+  color: #FDBA74;
+}
+
+.sarvam-subtext {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  margin-top: 3px;
+}
+
+.sarvam-controls-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-card);
+}
+
+.sarvam-lang-select {
+  height: 34px !important;
+  font-size: 12.5px !important;
+  padding: 0 10px !important;
+  flex: 1;
+}
+
+.sarvam-voice-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sarvam-quick-chips {
+  display: flex;
+  gap: 6px;
+  padding: 8px 14px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-surface);
+}
+
+.sarvam-chip {
+  flex-shrink: 0;
+  font-size: 11.5px;
+  font-weight: 500;
+  padding: 5px 10px;
+  border-radius: 9999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.sarvam-chip:hover {
+  border-color: var(--accent-green);
+  color: var(--text-primary);
+}
+
+.sarvam-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 210px;
+}
+
+.sarvam-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-width: 92%;
+}
+
+.sarvam-msg.user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.sarvam-msg.assistant {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+
+.sarvam-msg-bubble {
+  padding: 10px 13px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.sarvam-msg.user .sarvam-msg-bubble {
+  background: var(--accent-primary);
+  color: var(--accent-primary-text);
+  border-bottom-right-radius: 4px;
+}
+
+.sarvam-msg.assistant .sarvam-msg-bubble {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-bottom-left-radius: 4px;
+}
+
+.sarvam-msg-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.sarvam-speak-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.sarvam-speak-btn:hover {
+  border-color: var(--accent-green);
+  color: var(--text-primary);
+}
+
+.sarvam-station-card {
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  background: var(--bg-card);
+  font-size: 12px;
+}
+
+.sarvam-station-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.sarvam-input-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-surface);
+}
+
+.sarvam-mic-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.sarvam-mic-btn.listening {
+  border-color: #EF4444;
+  background: rgba(239, 68, 68, 0.14);
+  color: #EF4444;
+  animation: sarvamPulse 1.2s infinite;
+}
+
+.sarvam-text-input {
+  flex: 1;
+  height: 38px !important;
+  font-size: 13px !important;
+  margin-bottom: 0 !important;
+}
+
+.sarvam-send-btn {
+  height: 38px !important;
+  padding: 0 14px !important;
+  font-size: 13px !important;
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .sarvam-fab {
+    right: 12px;
+    bottom: 72px;
+    height: 40px;
+    padding: 0 12px;
+  }
+  .sarvam-drawer {
+    right: 12px;
+    left: 12px;
+    bottom: 120px;
+    width: auto;
+    max-height: 70vh;
+  }
+}

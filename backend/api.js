@@ -7,6 +7,13 @@ const { db, hashPassword, verifyPassword, syncNearbyChargersForLocation } = requ
 const { signToken, rehydrateUserFromToken, authenticateUser, checkRole } = require('./auth');
 const { admin: firebaseAdmin, isFirebaseConfigured, getFirestore } = require('./firebase');
 const { sendPushToUser } = require('./push');
+const {
+  SUPPORTED_LANGUAGES: SARVAM_LANGUAGES,
+  isSarvamConfigured,
+  askSarvamCopilot,
+  synthesizeSarvamSpeech,
+  translateWithSarvam
+} = require('./sarvam');
 
 const VALID_PUSH_PLATFORMS = new Set(['android', 'ios', 'web']);
 
@@ -69,9 +76,9 @@ function parseBody(req) {
 function sendJson(res, statusCode, data) {
   res.writeHead(statusCode, {
     'Content-Type': 'application/json',
-    'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https: http:; connect-src 'self' https://router.project-osrm.org https://*.tile.openstreetmap.org; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+    'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https: http:; media-src 'self' data: blob:; connect-src 'self' https://router.project-osrm.org https://*.tile.openstreetmap.org; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
     'X-Content-Type-Options': 'nosniff',
-    'Permissions-Policy': 'geolocation=(self), camera=(), microphone=(), payment=()',
+    'Permissions-Policy': 'geolocation=(self), camera=(), microphone=(self), payment=()',
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     'X-Frame-Options': 'DENY',
     'Strict-Transport-Security': 'max-age=63072000; includeSubDomains; preload',
@@ -2346,6 +2353,154 @@ async function handleApiRequest(req, res, pathname, queryParams) {
 
       db.prepare('UPDATE notifications SET is_read = 1 WHERE user_id = ?').run(user.id);
       return sendJson(res, 200, { success: true });
+    }
+
+    // =========================================================
+    // 8. SARVAM AI MULTILINGUAL EV CO-PILOT, VOICE TTS & TRANSLATE
+    // =========================================================
+
+    if (pathname === '/api/sarvam/status' && req.method === 'GET') {
+      return sendJson(res, 200, {
+        success: true,
+        provider: 'Sarvam AI',
+        configured: isSarvamConfigured(),
+        models: {
+          chat: process.env.SARVAM_CHAT_MODEL || 'sarvam-m',
+          tts: process.env.SARVAM_TTS_MODEL || 'bulbul:v2',
+          translate: 'mayura:v1'
+        },
+        languages: SARVAM_LANGUAGES.map(({ code, label, speechLocale }) => ({ code, label, speechLocale }))
+      });
+    }
+
+    if (pathname === '/api/sarvam/copilot' && req.method === 'POST') {
+      const body = await parseBody(req);
+      const message = String(body.message || '').trim();
+      const language = String(body.language || 'hinglish').trim();
+      if (!message) {
+        return sendJson(res, 400, { error: 'Please enter a message or voice prompt' });
+      }
+
+      const uLat = parseFloat(body.lat) || 28.4626;
+      const uLng = parseFloat(body.lng) || 77.4935;
+      const soc = Number.isFinite(parseFloat(body.soc)) ? parseFloat(body.soc) : 24;
+      const safetyBufferPct = Number.isFinite(parseFloat(body.safetyBufferPct)) ? parseFloat(body.safetyBufferPct) : 20;
+
+      let vehicle = null;
+      let activeBooking = null;
+      if (user) {
+        vehicle = db.prepare('SELECT * FROM vehicles WHERE user_id = ? AND is_primary = 1').get(user.id) ||
+                  db.prepare('SELECT * FROM vehicles WHERE user_id = ?').get(user.id);
+        activeBooking = db.prepare(`
+          SELECT b.booking_code, b.booking_date, b.start_time, b.end_time, b.status, c.name AS charger_name
+          FROM bookings b
+          JOIN chargers c ON b.charger_id = c.id
+          WHERE b.driver_id = ? AND b.status IN ('pending', 'confirmed', 'active')
+          ORDER BY b.booking_date ASC, b.start_time ASC
+          LIMIT 1
+        `).get(user.id);
+      }
+
+      const batteryKwh = Number.isFinite(parseFloat(body.batteryKwh))
+        ? parseFloat(body.batteryKwh)
+        : (vehicle?.battery_capacity_kwh || 4.0);
+      const is4W = batteryKwh > 10.0;
+      const efficiencyKwhPerKm = is4W ? 0.15 : 0.035;
+      const remainingKwh = batteryKwh * (soc / 100);
+      const grossRangeKm = parseFloat((remainingKwh / efficiencyKwhPerKm).toFixed(1));
+      const usableSafeRangeKm = parseFloat((grossRangeKm * (1 - safetyBufferPct / 100)).toFixed(1));
+
+      const chargers = db.prepare(`
+        SELECT c.*, u.name AS host_name
+        FROM chargers c
+        JOIN users u ON c.host_id = u.id
+        WHERE c.verification_status = 'approved'
+      `).all();
+
+      const nearestChargers = chargers
+        .map((c) => {
+          const straightKm = calculateDistanceKm(uLat, uLng, c.lat, c.lng);
+          const roadKm = parseFloat((straightKm * 1.25).toFixed(1));
+          const liveStatus = c.is_power_on ? c.status : 'offline';
+          return {
+            id: c.id,
+            code: c.code,
+            name: c.name,
+            host: c.host_name,
+            address: maskPrivateAddress(c.address),
+            connectorType: c.connector_type,
+            powerKw: c.power_kw,
+            billingType: c.billing_type,
+            pricePerKwh: c.price_per_kwh,
+            timeRatePerHour: c.time_rate_per_hour,
+            status: liveStatus,
+            estimatedRoadDistanceKm: roadKm,
+            isReachable: roadKm <= usableSafeRangeKm
+          };
+        })
+        .sort((a, b) => {
+          const aScore = (a.isReachable ? 2 : 0) + (a.status === 'available' ? 1 : 0);
+          const bScore = (b.isReachable ? 2 : 0) + (b.status === 'available' ? 1 : 0);
+          if (bScore !== aScore) return bScore - aScore;
+          return a.estimatedRoadDistanceKm - b.estimatedRoadDistanceKm;
+        });
+
+      const result = await askSarvamCopilot({
+        message,
+        language,
+        context: {
+          role: body.role || user?.role || 'driver',
+          userName: user?.name || 'EV Driver',
+          soc,
+          batteryKwh,
+          safetyBufferPct,
+          grossRangeKm,
+          usableSafeRangeKm,
+          walletBalance: user ? user.wallet_balance : null,
+          vehicleName: body.vehicleName || (vehicle ? `${vehicle.manufacturer} ${vehicle.model}` : 'Ola S1 Pro'),
+          nearestChargers: nearestChargers.slice(0, 6),
+          activeBooking
+        }
+      });
+
+      return sendJson(res, 200, {
+        success: true,
+        provider: 'Sarvam AI',
+        ...result,
+        usableSafeRangeKm,
+        reachableCount: nearestChargers.filter((c) => c.isReachable && c.status === 'available').length
+      });
+    }
+
+    if (pathname === '/api/sarvam/tts' && req.method === 'POST') {
+      const body = await parseBody(req);
+      const text = String(body.text || '').trim();
+      const language = String(body.language || 'hi-IN').trim();
+      if (!text) {
+        return sendJson(res, 400, { error: 'Text is required for voice synthesis' });
+      }
+
+      const tts = await synthesizeSarvamSpeech({ text, language });
+      return sendJson(res, 200, {
+        provider: 'Sarvam AI Bulbul',
+        ...tts
+      });
+    }
+
+    if (pathname === '/api/sarvam/translate' && req.method === 'POST') {
+      const body = await parseBody(req);
+      const text = String(body.text || '').trim();
+      const targetLanguage = String(body.targetLanguage || 'hi-IN').trim();
+      const sourceLanguage = String(body.sourceLanguage || 'en-IN').trim();
+      if (!text) {
+        return sendJson(res, 400, { error: 'Text is required for translation' });
+      }
+
+      const translated = await translateWithSarvam({ text, targetLanguage, sourceLanguage });
+      return sendJson(res, 200, {
+        provider: 'Sarvam AI Mayura',
+        ...translated
+      });
     }
 
     // 404 for unknown API routes

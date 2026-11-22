@@ -3156,3 +3156,739 @@ function openComplianceDoc(section) {
   if (bodyEl) bodyEl.innerHTML = doc.html;
   if (modal) modal.classList.add('open', 'active');
 }
+
+
+// ==========================================================================
+// SARVAM AI: ChargeEase Saarthi Multilingual EV Co-Pilot & Bulbul Voice
+// ==========================================================================
+const sarvamState = {
+  open: false,
+  language: localStorage.getItem('ce_sarvam_lang') || 'hinglish',
+  statusLoaded: false,
+  configured: false,
+  busy: false,
+  recognition: null,
+  listening: false,
+  activeAudio: null,
+  speechLocales: {
+    'en-IN': 'en-IN',
+    'hi-IN': 'hi-IN',
+    'hinglish': 'hi-IN',
+    'ta-IN': 'ta-IN',
+    'te-IN': 'te-IN',
+    'kn-IN': 'kn-IN',
+    'mr-IN': 'mr-IN',
+    'bn-IN': 'bn-IN',
+    'gu-IN': 'gu-IN',
+    'pa-IN': 'pa-IN'
+  }
+};
+
+function openSarvamDrawer() {
+  toggleSarvamDrawer(true);
+}
+
+function toggleSarvamDrawer(forceState) {
+  const drawer = getEl('sarvam-drawer');
+  if (!drawer) return;
+
+  const next = typeof forceState === 'boolean' ? forceState : !sarvamState.open;
+  sarvamState.open = next;
+  drawer.style.display = next ? 'flex' : 'none';
+
+  if (next) {
+    const langSel = getEl('sarvam-lang-select');
+    if (langSel) langSel.value = sarvamState.language;
+    if (!sarvamState.statusLoaded) checkSarvamStatus();
+    setTimeout(() => getEl('sarvam-input')?.focus(), 80);
+  } else {
+    stopSarvamPlayback();
+  }
+}
+
+function onSarvamLanguageChange(lang) {
+  sarvamState.language = lang || 'hinglish';
+  try { localStorage.setItem('ce_sarvam_lang', sarvamState.language); } catch (_) {}
+}
+
+async function checkSarvamStatus() {
+  try {
+    const res = await apiFetch('/sarvam/status');
+    sarvamState.statusLoaded = true;
+    sarvamState.configured = Boolean(res.configured);
+    const badge = getEl('sarvam-mode-badge');
+    if (badge) {
+      badge.textContent = res.configured ? 'Sarvam AI Live' : 'Sarvam AI Powered';
+    }
+  } catch (_) {}
+}
+
+function stopSarvamPlayback() {
+  if (sarvamState.activeAudio) {
+    try {
+      sarvamState.activeAudio.pause();
+      sarvamState.activeAudio.currentTime = 0;
+    } catch (_) {}
+    sarvamState.activeAudio = null;
+  }
+  if (window.speechSynthesis) {
+    try { window.speechSynthesis.cancel(); } catch (_) {}
+  }
+}
+
+function appendSarvamMessage({ role, text, meta, station }) {
+  const container = getEl('sarvam-messages');
+  if (!container) return null;
+
+  const wrap = document.createElement('div');
+  wrap.className = `sarvam-msg ${role}`;
+
+  const bubble = document.createElement('div');
+  bubble.className = 'sarvam-msg-bubble';
+  bubble.textContent = text;
+  wrap.appendChild(bubble);
+
+  if (station && role === 'assistant') {
+    const card = document.createElement('div');
+    card.className = 'sarvam-station-card';
+    const rate = station.billingType === 'time'
+      ? `Rs ${station.timeRatePerHour}/hr`
+      : `Rs ${station.pricePerKwh}/kWh`;
+    card.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:4px;">
+        <strong style="color:var(--text-primary);">${escapeHtml(station.name)}</strong>
+        <span class="badge-tag">${escapeHtml(station.estimatedRoadDistanceKm)} km</span>
+      </div>
+      <div style="color:var(--text-secondary);">
+        ${escapeHtml(station.connectorType)} &bull; ${escapeHtml(station.powerKw)} kW &bull; ${escapeHtml(rate)}
+      </div>
+      <div class="sarvam-station-actions">
+        <button type="button" class="btn-secondary btn-sm" style="flex:1;" onclick="sarvamFocusStation('${escapeHtml(station.id)}')">View on Map</button>
+        <button type="button" class="btn-bolt btn-sm" style="flex:1;" onclick="sarvamBookStation('${escapeHtml(station.id)}')">Book Slot</button>
+      </div>
+    `;
+    wrap.appendChild(card);
+  }
+
+  if (role === 'assistant') {
+    const metaRow = document.createElement('div');
+    metaRow.className = 'sarvam-msg-meta';
+
+    const metaSpan = document.createElement('span');
+    metaSpan.textContent = meta || 'Sarvam AI';
+    metaRow.appendChild(metaSpan);
+
+    const speakBtn = document.createElement('button');
+    speakBtn.type = 'button';
+    speakBtn.className = 'sarvam-speak-btn';
+    speakBtn.textContent = 'Listen (Bulbul)';
+    speakBtn.addEventListener('click', () => speakWithSarvam(text, speakBtn));
+    metaRow.appendChild(speakBtn);
+
+    wrap.appendChild(metaRow);
+  }
+
+  container.appendChild(wrap);
+  container.scrollTop = container.scrollHeight;
+  return wrap;
+}
+
+function getSarvamTelemetryContext() {
+  const veh = state.activeVehicle;
+  const batteryKwh = Number(veh?.battery_capacity_kwh || veh?.capacity || 4.0);
+  const vehicleName = veh
+    ? (veh.name || `${veh.manufacturer || ''} ${veh.model || ''}`.trim() || 'Ola S1 Pro')
+    : 'Ola S1 Pro';
+
+  return {
+    lat: state.userLocation?.lat || 28.4626,
+    lng: state.userLocation?.lng || 77.4935,
+    soc: Number(state.batterySoc ?? 24),
+    safetyBufferPct: Number(state.safetyBufferPct ?? 20),
+    batteryKwh,
+    vehicleName,
+    role: state.currentRole || state.currentUser?.role || 'driver'
+  };
+}
+
+function handleSarvamFormSubmit(e) {
+  e.preventDefault();
+  const input = getEl('sarvam-input');
+  const text = input?.value?.trim();
+  if (!text) return;
+  if (input) input.value = '';
+  sendSarvamPrompt(text);
+}
+
+async function sendSarvamPrompt(customText) {
+  const promptText = String(customText || '').trim();
+  if (!promptText || sarvamState.busy) return;
+
+  if (!sarvamState.open) toggleSarvamDrawer(true);
+
+  appendSarvamMessage({ role: 'user', text: promptText });
+  sarvamState.busy = true;
+
+  const sendBtn = getEl('sarvam-send-btn');
+  if (sendBtn) {
+    sendBtn.disabled = true;
+    sendBtn.textContent = '...';
+  }
+
+  const thinkingNode = appendSarvamMessage({
+    role: 'assistant',
+    text: 'Checking live EV range & nearby chargers with Sarvam AI...',
+    meta: 'Sarvam AI'
+  });
+
+  try {
+    const telemetry = getSarvamTelemetryContext();
+    const res = await apiFetch('/sarvam/copilot', {
+      method: 'POST',
+      body: {
+        message: promptText,
+        language: sarvamState.language,
+        ...telemetry
+      }
+    });
+
+    if (thinkingNode) thinkingNode.remove();
+
+    const modeLabel = res.mode === 'sarvam-live'
+      ? `Sarvam AI (${res.model || 'sarvam-m'})`
+      : 'Sarvam AI Co-Pilot (Live Telemetry)';
+
+    appendSarvamMessage({
+      role: 'assistant',
+      text: res.reply || 'Unable to generate guidance right now.',
+      meta: `${modeLabel} • Safe reach ${res.usableSafeRangeKm} km`,
+      station: res.recommendedStation || null
+    });
+
+    const autoSpeak = getEl('sarvam-autospeak')?.checked;
+    if (autoSpeak && res.reply) {
+      speakWithSarvam(res.reply);
+    }
+  } catch (err) {
+    if (thinkingNode) thinkingNode.remove();
+    appendSarvamMessage({
+      role: 'assistant',
+      text: `Could not reach Saarthi AI right now (${err.message}). Please try again.`,
+      meta: 'Sarvam AI'
+    });
+  } finally {
+    sarvamState.busy = false;
+    if (sendBtn) {
+      sendBtn.disabled = false;
+      sendBtn.textContent = 'Ask';
+    }
+  }
+}
+
+async function speakWithSarvam(text, btnEl) {
+  const clean = String(text || '').trim();
+  if (!clean) return;
+
+  stopSarvamPlayback();
+  const originalLabel = btnEl ? btnEl.textContent : '';
+  if (btnEl) btnEl.textContent = 'Speaking...';
+
+  const resetBtn = () => {
+    if (btnEl) btnEl.textContent = originalLabel || 'Listen (Bulbul)';
+  };
+
+  try {
+    const res = await apiFetch('/sarvam/tts', {
+      method: 'POST',
+      body: { text: clean, language: sarvamState.language }
+    });
+
+    if (res?.success && res?.audioBase64) {
+      const audio = new Audio(`data:${res.mimeType || 'audio/wav'};base64,${res.audioBase64}`);
+      sarvamState.activeAudio = audio;
+      audio.onended = resetBtn;
+      audio.onerror = () => {
+        speakWithBrowserFallback(clean, resetBtn);
+      };
+      await audio.play();
+      return;
+    }
+  } catch (_) {
+    // Graceful fallback to browser speech synthesis
+  }
+
+  speakWithBrowserFallback(clean, resetBtn);
+}
+
+function speakWithBrowserFallback(text, onDone) {
+  if (!window.speechSynthesis) {
+    if (onDone) onDone();
+    return;
+  }
+  try {
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = sarvamState.speechLocales[sarvamState.language] || 'en-IN';
+    utter.rate = 1.02;
+    utter.onend = () => { if (onDone) onDone(); };
+    utter.onerror = () => { if (onDone) onDone(); };
+    window.speechSynthesis.speak(utter);
+  } catch (_) {
+    if (onDone) onDone();
+  }
+}
+
+function toggleSarvamVoiceInput() {
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const micBtn = getEl('sarvam-mic-btn');
+  if (!SpeechRec) {
+    showToast('Voice input requires Chrome or Edge browser microphone support.', 'info');
+    return;
+  }
+
+  if (sarvamState.listening && sarvamState.recognition) {
+    try { sarvamState.recognition.stop(); } catch (_) {}
+    sarvamState.listening = false;
+    if (micBtn) micBtn.classList.remove('listening');
+    return;
+  }
+
+  const recognition = new SpeechRec();
+  recognition.lang = sarvamState.speechLocales[sarvamState.language] || 'hi-IN';
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+
+  recognition.onstart = () => {
+    sarvamState.listening = true;
+    if (micBtn) micBtn.classList.add('listening');
+    showToast(`Listening in ${recognition.lang}... speak now`, 'info');
+  };
+
+  recognition.onresult = (event) => {
+    const transcript = event?.results?.[0]?.[0]?.transcript?.trim();
+    if (transcript) {
+      const input = getEl('sarvam-input');
+      if (input) input.value = transcript;
+      sendSarvamPrompt(transcript);
+    }
+  };
+
+  recognition.onerror = (event) => {
+    showToast(`Voice capture error: ${event?.error || 'microphone unavailable'}`, 'error');
+  };
+
+  recognition.onend = () => {
+    sarvamState.listening = false;
+    if (micBtn) micBtn.classList.remove('listening');
+  };
+
+  sarvamState.recognition = recognition;
+  try {
+    recognition.start();
+  } catch (err) {
+    sarvamState.listening = false;
+    if (micBtn) micBtn.classList.remove('listening');
+    showToast('Unable to start microphone capture.', 'error');
+  }
+}
+
+function runSarvamRangeBriefing() {
+  const soc = Number(state.batterySoc ?? 24);
+  const buf = Number(state.safetyBufferPct ?? 20);
+  openSarvamDrawer();
+  sendSarvamPrompt(
+    `Give me a quick safety briefing for my current ${soc}% battery with ${buf}% safety buffer and tell me the best reachable charger right now.`
+  );
+}
+
+async function sarvamFocusStation(stationId) {
+  if (!stationId) return;
+  if (state.currentStage !== 'app') {
+    await enterAppWorkspace();
+  }
+  switchTab('explore');
+  toggleSarvamDrawer(false);
+  if (typeof selectStation === 'function') {
+    selectStation(stationId);
+  } else {
+    state.selectedStationId = stationId;
+  }
+}
+
+async function sarvamBookStation(stationId) {
+  if (!stationId) return;
+  if (state.currentStage !== 'app') {
+    await enterAppWorkspace();
+  }
+  toggleSarvamDrawer(false);
+  if (typeof openBookingModal === 'function') {
+    openBookingModal(stationId);
+  }
+}
+
+
+// ==========================================================================
+// SARVAM AI: ChargeEase Saarthi Multilingual EV Co-Pilot & Bulbul Voice
+// ==========================================================================
+const sarvamState = {
+  open: false,
+  language: localStorage.getItem('ce_sarvam_lang') || 'hinglish',
+  statusLoaded: false,
+  configured: false,
+  busy: false,
+  recognition: null,
+  listening: false,
+  activeAudio: null,
+  speechLocales: {
+    'en-IN': 'en-IN',
+    'hi-IN': 'hi-IN',
+    'hinglish': 'hi-IN',
+    'ta-IN': 'ta-IN',
+    'te-IN': 'te-IN',
+    'kn-IN': 'kn-IN',
+    'mr-IN': 'mr-IN',
+    'bn-IN': 'bn-IN',
+    'gu-IN': 'gu-IN',
+    'pa-IN': 'pa-IN'
+  }
+};
+
+function openSarvamDrawer() {
+  toggleSarvamDrawer(true);
+}
+
+function toggleSarvamDrawer(forceState) {
+  const drawer = getEl('sarvam-drawer');
+  if (!drawer) return;
+
+  const next = typeof forceState === 'boolean' ? forceState : !sarvamState.open;
+  sarvamState.open = next;
+  drawer.style.display = next ? 'flex' : 'none';
+
+  if (next) {
+    const langSel = getEl('sarvam-lang-select');
+    if (langSel) langSel.value = sarvamState.language;
+    if (!sarvamState.statusLoaded) checkSarvamStatus();
+    setTimeout(() => getEl('sarvam-input')?.focus(), 80);
+  } else {
+    stopSarvamPlayback();
+  }
+}
+
+function onSarvamLanguageChange(lang) {
+  sarvamState.language = lang || 'hinglish';
+  try { localStorage.setItem('ce_sarvam_lang', sarvamState.language); } catch (_) {}
+}
+
+async function checkSarvamStatus() {
+  try {
+    const res = await apiFetch('/sarvam/status');
+    sarvamState.statusLoaded = true;
+    sarvamState.configured = Boolean(res.configured);
+    const badge = getEl('sarvam-mode-badge');
+    if (badge) {
+      badge.textContent = res.configured ? 'Sarvam AI Live' : 'Sarvam AI Powered';
+    }
+  } catch (_) {}
+}
+
+function stopSarvamPlayback() {
+  if (sarvamState.activeAudio) {
+    try {
+      sarvamState.activeAudio.pause();
+      sarvamState.activeAudio.currentTime = 0;
+    } catch (_) {}
+    sarvamState.activeAudio = null;
+  }
+  if (window.speechSynthesis) {
+    try { window.speechSynthesis.cancel(); } catch (_) {}
+  }
+}
+
+function appendSarvamMessage({ role, text, meta, station }) {
+  const container = getEl('sarvam-messages');
+  if (!container) return null;
+
+  const wrap = document.createElement('div');
+  wrap.className = `sarvam-msg ${role}`;
+
+  const bubble = document.createElement('div');
+  bubble.className = 'sarvam-msg-bubble';
+  bubble.textContent = text;
+  wrap.appendChild(bubble);
+
+  if (station && role === 'assistant') {
+    const card = document.createElement('div');
+    card.className = 'sarvam-station-card';
+    const rate = station.billingType === 'time'
+      ? `Rs ${station.timeRatePerHour}/hr`
+      : `Rs ${station.pricePerKwh}/kWh`;
+    card.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:4px;">
+        <strong style="color:var(--text-primary);">${escapeHtml(station.name)}</strong>
+        <span class="badge-tag">${escapeHtml(station.estimatedRoadDistanceKm)} km</span>
+      </div>
+      <div style="color:var(--text-secondary);">
+        ${escapeHtml(station.connectorType)} &bull; ${escapeHtml(station.powerKw)} kW &bull; ${escapeHtml(rate)}
+      </div>
+      <div class="sarvam-station-actions">
+        <button type="button" class="btn-secondary btn-sm" style="flex:1;" onclick="sarvamFocusStation('${escapeHtml(station.id)}')">View on Map</button>
+        <button type="button" class="btn-bolt btn-sm" style="flex:1;" onclick="sarvamBookStation('${escapeHtml(station.id)}')">Book Slot</button>
+      </div>
+    `;
+    wrap.appendChild(card);
+  }
+
+  if (role === 'assistant') {
+    const metaRow = document.createElement('div');
+    metaRow.className = 'sarvam-msg-meta';
+
+    const metaSpan = document.createElement('span');
+    metaSpan.textContent = meta || 'Sarvam AI';
+    metaRow.appendChild(metaSpan);
+
+    const speakBtn = document.createElement('button');
+    speakBtn.type = 'button';
+    speakBtn.className = 'sarvam-speak-btn';
+    speakBtn.textContent = 'Listen (Bulbul)';
+    speakBtn.addEventListener('click', () => speakWithSarvam(text, speakBtn));
+    metaRow.appendChild(speakBtn);
+
+    wrap.appendChild(metaRow);
+  }
+
+  container.appendChild(wrap);
+  container.scrollTop = container.scrollHeight;
+  return wrap;
+}
+
+function getSarvamTelemetryContext() {
+  const veh = state.activeVehicle;
+  const batteryKwh = Number(veh?.battery_capacity_kwh || veh?.capacity || 4.0);
+  const vehicleName = veh
+    ? (veh.name || `${veh.manufacturer || ''} ${veh.model || ''}`.trim() || 'Ola S1 Pro')
+    : 'Ola S1 Pro';
+
+  return {
+    lat: state.userLocation?.lat || 28.4626,
+    lng: state.userLocation?.lng || 77.4935,
+    soc: Number(state.batterySoc ?? 24),
+    safetyBufferPct: Number(state.safetyBufferPct ?? 20),
+    batteryKwh,
+    vehicleName,
+    role: state.currentRole || state.currentUser?.role || 'driver'
+  };
+}
+
+function handleSarvamFormSubmit(e) {
+  e.preventDefault();
+  const input = getEl('sarvam-input');
+  const text = input?.value?.trim();
+  if (!text) return;
+  if (input) input.value = '';
+  sendSarvamPrompt(text);
+}
+
+async function sendSarvamPrompt(customText) {
+  const promptText = String(customText || '').trim();
+  if (!promptText || sarvamState.busy) return;
+
+  if (!sarvamState.open) toggleSarvamDrawer(true);
+
+  appendSarvamMessage({ role: 'user', text: promptText });
+  sarvamState.busy = true;
+
+  const sendBtn = getEl('sarvam-send-btn');
+  if (sendBtn) {
+    sendBtn.disabled = true;
+    sendBtn.textContent = '...';
+  }
+
+  const thinkingNode = appendSarvamMessage({
+    role: 'assistant',
+    text: 'Checking live EV range & nearby chargers with Sarvam AI...',
+    meta: 'Sarvam AI'
+  });
+
+  try {
+    const telemetry = getSarvamTelemetryContext();
+    const res = await apiFetch('/sarvam/copilot', {
+      method: 'POST',
+      body: {
+        message: promptText,
+        language: sarvamState.language,
+        ...telemetry
+      }
+    });
+
+    if (thinkingNode) thinkingNode.remove();
+
+    const modeLabel = res.mode === 'sarvam-live'
+      ? `Sarvam AI (${res.model || 'sarvam-m'})`
+      : 'Sarvam AI Co-Pilot (Live Telemetry)';
+
+    appendSarvamMessage({
+      role: 'assistant',
+      text: res.reply || 'Unable to generate guidance right now.',
+      meta: `${modeLabel} • Safe reach ${res.usableSafeRangeKm} km`,
+      station: res.recommendedStation || null
+    });
+
+    const autoSpeak = getEl('sarvam-autospeak')?.checked;
+    if (autoSpeak && res.reply) {
+      speakWithSarvam(res.reply);
+    }
+  } catch (err) {
+    if (thinkingNode) thinkingNode.remove();
+    appendSarvamMessage({
+      role: 'assistant',
+      text: `Could not reach Saarthi AI right now (${err.message}). Please try again.`,
+      meta: 'Sarvam AI'
+    });
+  } finally {
+    sarvamState.busy = false;
+    if (sendBtn) {
+      sendBtn.disabled = false;
+      sendBtn.textContent = 'Ask';
+    }
+  }
+}
+
+async function speakWithSarvam(text, btnEl) {
+  const clean = String(text || '').trim();
+  if (!clean) return;
+
+  stopSarvamPlayback();
+  const originalLabel = btnEl ? btnEl.textContent : '';
+  if (btnEl) btnEl.textContent = 'Speaking...';
+
+  const resetBtn = () => {
+    if (btnEl) btnEl.textContent = originalLabel || 'Listen (Bulbul)';
+  };
+
+  try {
+    const res = await apiFetch('/sarvam/tts', {
+      method: 'POST',
+      body: { text: clean, language: sarvamState.language }
+    });
+
+    if (res?.success && res?.audioBase64) {
+      const audio = new Audio(`data:${res.mimeType || 'audio/wav'};base64,${res.audioBase64}`);
+      sarvamState.activeAudio = audio;
+      audio.onended = resetBtn;
+      audio.onerror = () => {
+        speakWithBrowserFallback(clean, resetBtn);
+      };
+      await audio.play();
+      return;
+    }
+  } catch (_) {
+    // Graceful fallback to browser speech synthesis
+  }
+
+  speakWithBrowserFallback(clean, resetBtn);
+}
+
+function speakWithBrowserFallback(text, onDone) {
+  if (!window.speechSynthesis) {
+    if (onDone) onDone();
+    return;
+  }
+  try {
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = sarvamState.speechLocales[sarvamState.language] || 'en-IN';
+    utter.rate = 1.02;
+    utter.onend = () => { if (onDone) onDone(); };
+    utter.onerror = () => { if (onDone) onDone(); };
+    window.speechSynthesis.speak(utter);
+  } catch (_) {
+    if (onDone) onDone();
+  }
+}
+
+function toggleSarvamVoiceInput() {
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const micBtn = getEl('sarvam-mic-btn');
+  if (!SpeechRec) {
+    showToast('Voice input requires Chrome or Edge browser microphone support.', 'info');
+    return;
+  }
+
+  if (sarvamState.listening && sarvamState.recognition) {
+    try { sarvamState.recognition.stop(); } catch (_) {}
+    sarvamState.listening = false;
+    if (micBtn) micBtn.classList.remove('listening');
+    return;
+  }
+
+  const recognition = new SpeechRec();
+  recognition.lang = sarvamState.speechLocales[sarvamState.language] || 'hi-IN';
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+
+  recognition.onstart = () => {
+    sarvamState.listening = true;
+    if (micBtn) micBtn.classList.add('listening');
+    showToast(`Listening in ${recognition.lang}... speak now`, 'info');
+  };
+
+  recognition.onresult = (event) => {
+    const transcript = event?.results?.[0]?.[0]?.transcript?.trim();
+    if (transcript) {
+      const input = getEl('sarvam-input');
+      if (input) input.value = transcript;
+      sendSarvamPrompt(transcript);
+    }
+  };
+
+  recognition.onerror = (event) => {
+    showToast(`Voice capture error: ${event?.error || 'microphone unavailable'}`, 'error');
+  };
+
+  recognition.onend = () => {
+    sarvamState.listening = false;
+    if (micBtn) micBtn.classList.remove('listening');
+  };
+
+  sarvamState.recognition = recognition;
+  try {
+    recognition.start();
+  } catch (err) {
+    sarvamState.listening = false;
+    if (micBtn) micBtn.classList.remove('listening');
+    showToast('Unable to start microphone capture.', 'error');
+  }
+}
+
+function runSarvamRangeBriefing() {
+  const soc = Number(state.batterySoc ?? 24);
+  const buf = Number(state.safetyBufferPct ?? 20);
+  openSarvamDrawer();
+  sendSarvamPrompt(
+    `Give me a quick safety briefing for my current ${soc}% battery with ${buf}% safety buffer and tell me the best reachable charger right now.`
+  );
+}
+
+async function sarvamFocusStation(stationId) {
+  if (!stationId) return;
+  if (state.currentStage !== 'app') {
+    await enterAppWorkspace();
+  }
+  switchTab('explore');
+  toggleSarvamDrawer(false);
+  if (typeof selectStation === 'function') {
+    selectStation(stationId);
+  } else {
+    state.selectedStationId = stationId;
+  }
+}
+
+async function sarvamBookStation(stationId) {
+  if (!stationId) return;
+  if (state.currentStage !== 'app') {
+    await enterAppWorkspace();
+  }
+  toggleSarvamDrawer(false);
+  if (typeof openBookingModal === 'function') {
+    openBookingModal(stationId);
+  }
+}

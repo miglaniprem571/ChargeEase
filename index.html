@@ -58,11 +58,14 @@
 
       <div class="lp-hero-ctas">
         <button class="lp-btn-solid lg" id="lp-hero-workspace-btn" onclick="enterAppWorkspace()">Open App &rarr;</button>
+        <button class="lp-btn-outline lg sarvam-cta-outline" onclick="openSarvamDrawer()">Ask Saarthi AI &bull; Sarvam</button>
         <button class="lp-btn-outline lg" onclick="openAuthPage('signup', 'driver')">Sign Up as EV Driver</button>
         <button class="lp-btn-outline lg" onclick="openAuthPage('signup', 'host')">Sign Up as Charger Host</button>
       </div>
 
       <div class="lp-micro-strip tabular">
+        <span>SARVAM AI MULTILINGUAL VOICE CO-PILOT</span>
+        <span>&bull;</span>
         <span>100% BASE TARIFF TO HOST</span>
         <span>&bull;</span>
         <span>20% SAFETY BUFFER ENGINE</span>
@@ -508,6 +511,9 @@
     </div>
 
     <div class="header-actions">
+      <button type="button" class="demo-action-btn sarvam-header-pill" onclick="openSarvamDrawer()" title="ChargeEase Saarthi powered by Sarvam AI" style="height:36px; padding:0 12px;">
+        <span class="sarvam-spark-dot"></span> Saarthi AI
+      </button>
       <button type="button" class="demo-action-btn" id="app-theme-toggle-btn" onclick="toggleThemeMode()" aria-label="Toggle dark mode" style="height:36px; padding:0 12px;">Light Mode</button>
       <div class="notif-bell-wrap" onclick="toggleNotificationsPanel()" title="Notifications" role="button" tabindex="0">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
@@ -745,7 +751,12 @@
             <h2 style="font-size:26px; font-weight:700; letter-spacing:-0.02em;">Reachability Engine</h2>
             <p class="panel-subtitle" style="font-size:14px;">Check how far your EV can safely travel with a 20% emergency battery reserve.</p>
           </div>
-          <span class="badge-tag" style="font-size:12px; padding:5px 10px;">Usable reach = Gross range &times; (1 &minus; 20% buffer)</span>
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <span class="badge-tag" style="font-size:12px; padding:5px 10px;">Usable reach = Gross range &times; (1 &minus; 20% buffer)</span>
+            <button type="button" class="btn-secondary btn-sm sarvam-brief-btn" onclick="runSarvamRangeBriefing()">
+              <span class="sarvam-spark-dot"></span> Sarvam Voice Briefing
+            </button>
+          </div>
         </div>
 
         <!-- Primary Controls: Vehicle & Battery Slider -->
@@ -1564,6 +1575,81 @@
       <div class="modal-body" id="compliance-modal-body" style="font-size:13px; color:var(--text-secondary); line-height:1.65;"></div>
     </div>
   </div>
+
+  <!-- ==================== SARVAM AI: CHARGEEASE SAARTHI CO-PILOT ==================== -->
+  <button type="button" id="sarvam-fab" class="sarvam-fab" onclick="toggleSarvamDrawer()" aria-label="Open ChargeEase Saarthi powered by Sarvam AI">
+    <span class="sarvam-fab-pulse"></span>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+      <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+      <line x1="12" y1="19" x2="12" y2="22"/>
+    </svg>
+    <span>Saarthi AI</span>
+    <span class="sarvam-fab-tag">SARVAM</span>
+  </button>
+
+  <aside id="sarvam-drawer" class="sarvam-drawer" style="display:none;" aria-label="ChargeEase Saarthi AI Assistant">
+    <div class="sarvam-drawer-head">
+      <div>
+        <div class="sarvam-title-row">
+          <span class="sarvam-spark-dot"></span>
+          <strong>ChargeEase Saarthi</strong>
+          <span class="sarvam-badge-pill" id="sarvam-mode-badge">Powered by Sarvam AI</span>
+        </div>
+        <div class="sarvam-subtext">Multilingual EV Reachability &amp; Bulbul Voice Co-Pilot</div>
+      </div>
+      <button type="button" class="modal-close-btn" onclick="toggleSarvamDrawer(false)" aria-label="Close Saarthi AI">&times;</button>
+    </div>
+
+    <div class="sarvam-controls-bar">
+      <select id="sarvam-lang-select" class="custom-select sarvam-lang-select" onchange="onSarvamLanguageChange(this.value)" aria-label="Select Indian language">
+        <option value="hinglish" selected>Hinglish (India)</option>
+        <option value="hi-IN">हिन्दी (Hindi)</option>
+        <option value="en-IN">English (India)</option>
+        <option value="ta-IN">தமிழ் (Tamil)</option>
+        <option value="te-IN">తెలుగు (Telugu)</option>
+        <option value="kn-IN">ಕನ್ನಡ (Kannada)</option>
+        <option value="mr-IN">मराठी (Marathi)</option>
+        <option value="bn-IN">বাংলা (Bengali)</option>
+        <option value="gu-IN">ગુજરાતી (Gujarati)</option>
+        <option value="pa-IN">ਪੰਜਾਬੀ (Punjabi)</option>
+      </select>
+      <label class="sarvam-voice-toggle" title="Auto-play replies with Sarvam Bulbul Voice">
+        <input type="checkbox" id="sarvam-autospeak" checked>
+        <span>Bulbul Voice</span>
+      </label>
+    </div>
+
+    <div class="sarvam-quick-chips">
+      <button type="button" class="sarvam-chip" onclick="sendSarvamPrompt('Meri battery low hai, sabse paas safe reachable charger kaunsa hai?')">Nearest safe dock</button>
+      <button type="button" class="sarvam-chip" onclick="sendSarvamPrompt('20% safety buffer kaise kaam karta hai?')">20% safety buffer</button>
+      <button type="button" class="sarvam-chip" onclick="sendSarvamPrompt('Fastest available charger with lowest rate near me?')">Best rate charger</button>
+      <button type="button" class="sarvam-chip" onclick="sendSarvamPrompt('Host ke roop mein 100% base tariff payout kaise milta hai?')">Host payout tips</button>
+    </div>
+
+    <div id="sarvam-messages" class="sarvam-messages">
+      <div class="sarvam-msg assistant">
+        <div class="sarvam-msg-bubble">
+          Namaste! Main <strong>ChargeEase Saarthi</strong> hoon — powered by <strong>Sarvam AI</strong>. Apni bhasha mein bolein ya likhein: main aapki live battery range, 20% safety buffer aur Delhi NCR ke nearest reachable chargers check karke turant guide karunga.
+        </div>
+        <div class="sarvam-msg-meta">
+          <span>Sarvam AI &bull; Live Telemetry Connected</span>
+        </div>
+      </div>
+    </div>
+
+    <form class="sarvam-input-bar" onsubmit="handleSarvamFormSubmit(event)">
+      <button type="button" id="sarvam-mic-btn" class="sarvam-mic-btn" onclick="toggleSarvamVoiceInput()" title="Speak in your Indian language" aria-label="Voice input">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" y1="19" x2="12" y2="22"/>
+        </svg>
+      </button>
+      <input type="text" id="sarvam-input" class="custom-input sarvam-text-input" placeholder="Ask in Hindi, Hinglish, Tamil, English..." autocomplete="off" aria-label="Ask ChargeEase Saarthi">
+      <button type="submit" id="sarvam-send-btn" class="btn-bolt sarvam-send-btn">Ask</button>
+    </form>
+  </aside>
 
   <div id="toast-container"></div>
 
