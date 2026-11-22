@@ -1,0 +1,4 @@
+{
+  "apiBaseUrl": "https://charge-ease-ev-five.vercel.app",
+  "_comment": "Set apiBaseUrl to your HTTPS backend origin, e.g. https://your-api.example.com. Do not add /api; the app adds it automatically."
+}

@@ -1,0 +1,13 @@
+node_modules/
+.env
+chargeease.db
+chargeease.db-shm
+chargeease.db-wal
+.vercel/
+www/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/app/google-services.json
